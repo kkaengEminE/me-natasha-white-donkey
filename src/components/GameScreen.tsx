@@ -138,6 +138,15 @@ export default function GameScreen() {
         <div className="si-title">{STAGE_NAMES[currentStage]}</div>
       </div>
 
+      <button
+        id="stage-restart-btn"
+        onClick={() => {
+          const fn = (window as any)['gameStartS' + currentStage];
+          if (typeof fn === 'function') fn();
+        }}
+      >
+        ↻ 스테이지 다시 시작
+      </button>
       {ADMIN_ENABLED && (
         <button id="admin-toggle" onClick={() => setAdminOpen(true)}>
           ⚙ 관리자 모드
@@ -260,7 +269,6 @@ export default function GameScreen() {
             <div className="frag-dot" id="s2d3" />
             <div className="frag-dot" id="s2d4" />
             <div className="frag-dot" id="s2d5" />
-            <div className="frag-dot" id="s2d6" />
           </div>
           <div id="s2ctrl">
             방향키 이동 · ↑ 점프

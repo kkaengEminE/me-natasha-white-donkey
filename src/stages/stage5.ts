@@ -22,11 +22,11 @@ const WORLD_W=3600;
 const tunables = {
   playerStartX: 120,        // @TUNABLE 캐릭터 시작 X
   playerStartY: -46,        // @TUNABLE 캐릭터 시작 Y
-  jumpForce: -10.5,         // @TUNABLE 점프 힘
+  jumpForce: -18,           // @TUNABLE 점프 힘
   moveSpeed: 3.0,           // @TUNABLE 이동 속도
-  gravity: 0.42,            // @TUNABLE 중력
+  gravity: 1,               // @TUNABLE 중력
   donkeySpeed: 4.8,         // @TUNABLE 당나귀 속도
-  donkeyJump: -11.5,        // @TUNABLE 당나귀 점프
+  donkeyJump: -18,          // @TUNABLE 당나귀 점프
   donkeyStartX: 200,        // @TUNABLE 당나귀 시작 X
   fragments: [
     { x: 550,  yOffset: -85 }, // @TUNABLE 다이아 0
@@ -49,6 +49,7 @@ let platforms=[],fragments=[],interactables=[];
 let natashaX=2800, natashaVisible=false, natashaTriggered=false, natashaAlpha=0;
 let natashaWalkT=0, natashaDir=-1;
 let natashaWaiting=false;
+let natashaTalked=false;
 
 // Ending
 let endingTriggered=false, moonRising=false, moonRiseY=0;
@@ -62,8 +63,8 @@ let villageGlow=0;
 const snowPtcls=[];
 for(let i=0;i<140;i++) snowPtcls.push({x:Math.random()*4000,y:Math.random()*900,r:Math.random()*2+0.3,sp:Math.random()*0.55+0.15,dr:(Math.random()-0.5)*0.2,ph:Math.random()*Math.PI*2});
 
-const FRAG_WORDS=['나타샤는 나를 사랑하고','응앙응앙 울 것이다','어데서 흰 당나귀도 오늘밤이 좋아서'];
-const FRAG_LINES=[[0],[2],[1]];
+const FRAG_WORDS=['나타샤는 나를 사랑하고','어데서 흰 당나귀도 오늘밤이 좋아서','응앙응앙 울 것이다'];
+const FRAG_LINES=[[0],[1],[2]];
 
 const player={x:120,y:0,vx:0,vy:0,w:20,h:46,onGround:false,dir:1,walkT:0,breathT:0,mounted:false};
 const donkey={x:200,y:0,vx:0,vy:0,w:72,h:52,onGround:false,dir:1,walkT:0,earsUp:false,earTimer:0,tailWag:0};
@@ -78,6 +79,16 @@ document.addEventListener('keydown',e=>{
     else if(player.mounted) dismount();
   }
   if((e.key==='e'||e.key==='E')&&gameStarted&&!gameOver){
+    // talk to Natasha when she's waiting near the player
+    const px = player.mounted ? donkey.x : player.x;
+    if (natashaWaiting && !natashaTalked && Math.abs(px - natashaX) < 120) {
+      if (!player.mounted) {
+        showThought('당나귀와 같이 오세요', natashaX, groundY-90);
+        return;
+      }
+      talkToNatasha();
+      return;
+    }
     const near=interactables.find(ob=>Math.abs(player.x-(ob.x+ob.w/2))<80&&Math.abs((player.y+player.h)-ob.y)<100);
     if(near) showThought(near.text,near.x,near.y-20);
   }
@@ -195,7 +206,8 @@ function updateEntities(){
         natashaWaiting=true;
         // donkey hears and brays
         donkey.earsUp=true; donkey.earTimer=0;
-        setTimeout(()=>{ collectAllRemaining(); }, 800);
+        // hint: press E to talk to her
+        showThought('[ E ] 나타샤에게 말을 건다', natashaX, groundY-90);
       }
     }
   }
@@ -205,9 +217,14 @@ function updateEntities(){
 
   fragments.forEach(f=>{
     if(f.collected)return;
-    const cx=player.mounted?donkey.x+donkey.w/2:player.x;
-    const cy=player.mounted?donkey.y+donkey.h/2:player.y+player.h/2;
-    if(Math.hypot(cx-f.x,cy-f.y)<(player.mounted?72:46)) collectFrag(f);
+    if(!player.mounted){
+      const dist=Math.hypot(player.x-f.x,player.y+player.h/2-f.y);
+      if(dist<60) showThought('당나귀와 같이 오세요',f.x,f.y);
+      return;
+    }
+    const cx=donkey.x+donkey.w/2;
+    const cy=donkey.y+donkey.h/2;
+    if(Math.hypot(cx-f.x,cy-f.y)<72) collectFrag(f);
   });
 
   const nearObj=interactables.find(ob=>Math.abs(player.x-(ob.x+ob.w/2))<80&&Math.abs((player.y+player.h)-ob.y)<100);
@@ -229,9 +246,24 @@ function collectFrag(f){
   setTimeout(()=>fl.classList.remove('show'), tunables.popupFadeMs);
 }
 
-function collectAllRemaining(){
-  fragments.forEach(f=>{ if(!f.collected) collectFrag(f); });
-  setTimeout(triggerEnding, 1200);
+function talkToNatasha(){
+  natashaTalked=true;
+  const overlay=document.getElementById('s5natasha_overlay');
+  const txt=document.getElementById('s5natasha_text');
+  const lines=['나타샤: "왔구나."','"같이 산골로 가자."','응앙— 응앙—'];
+  overlay.classList.add('show');
+  let i=0;
+  function next(){
+    if(i>=lines.length){
+      // start ending while the bubble fades out (CSS transition ~2s)
+      overlay.classList.remove('show');
+      triggerEnding();
+      return;
+    }
+    txt.textContent=lines[i++];
+    setTimeout(next, 1800);
+  }
+  next();
 }
 
 let natashaLines=['나타샤가 왔다','…','응앙—'];
@@ -466,7 +498,9 @@ function drawDonkey(){
   const t=Date.now()/1000;
   const dx=donkey.x-camX, dy=donkey.y;
   if(dx<-120||dx>W+120)return;
-  ctx.save(); ctx.translate(dx,dy); ctx.scale(donkey.dir,1);
+  ctx.save(); ctx.translate(dx,dy);
+  if(donkey.dir<0) ctx.translate(donkey.w,0);
+  ctx.scale(donkey.dir,1);
   const moving=Math.abs(donkey.vx)>0.3;
   const legSw=moving?Math.sin(donkey.walkT)*13:0;
   ctx.save(); ctx.scale(1,0.25); ctx.beginPath(); ctx.ellipse(donkey.w/2,donkey.h+14,donkey.w/2+4,8,0,0,Math.PI*2); ctx.fillStyle='rgba(0,0,0,0.2)'; ctx.fill(); ctx.restore();
@@ -633,6 +667,7 @@ function resetStateS5(){
   gameOver = false;
   camX = 0;
   natashaTriggered = false; natashaVisible = false; natashaAlpha = 0;
+  natashaWaiting = false; natashaTalked = false;
   endingTriggered = false; moonRising = false; snowStop = false;
   fragments.forEach((f) => (f.collected = false));
   for (let i = 0; i < fragments.length; i++) {

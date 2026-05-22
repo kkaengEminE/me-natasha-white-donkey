@@ -38,18 +38,17 @@ let transitioning = false;
 let gameStarted = false;
 let gameOver    = false;
 let collected   = 0;
-const TOTAL     = 7;
+const TOTAL     = 6;
 const LINES     = ['l1','l2','l3','l4','l5','l6'];
-// fragments → which lines they unlock (pairs)
-const FRAG_LINES = [[0],[1],[2],[3,4],[5],[],[]] ; // last 2 are bonus pickups
+// fragments → which lines they unlock (one fragment per poem line)
+const FRAG_LINES = [[0],[1],[2],[3],[4],[5]];
 const FRAG_WORDS = [
   '나타샤를 사랑은 하고',
   '눈은 푹푹 날리고',
   '나는 혼자 쓸쓸히 앉어 소주를 마신다',
-  '나타샤와 나는\n눈이 푹푹 쌓이는 밤 흰 당나귀 타고',
+  '나타샤와 나는',
+  '눈이 푹푹 쌓이는 밤 흰 당나귀 타고',
   '산골로 가자 출출이 우는 깊은 산골로 가자',
-  '소주를 마신다',
-  '흰 당나귀 타고',
 ];
 
 // ─────────────────────────────────────────
@@ -58,9 +57,9 @@ const FRAG_WORDS = [
 const tunables = {
   playerStartX: 160,        // @TUNABLE 캐릭터 시작 X
   playerStartY: -46,        // @TUNABLE 캐릭터 시작 Y (groundY 기준)
-  jumpForce: -10,           // @TUNABLE 점프 힘
+  jumpForce: -18,           // @TUNABLE 점프 힘
   moveSpeed: 3.0,           // @TUNABLE 이동 속도
-  gravity: 0.44,            // @TUNABLE 중력
+  gravity: 1,               // @TUNABLE 중력
   // room 0 fragments (alley)
   fragments: [
     { x: 420,  yOffset: -80  }, // @TUNABLE r0 다이아 0
@@ -129,10 +128,9 @@ function buildFragments(room) {
     }));
   } else {
     fragments = [
-      { id:3, x:440,  y:groundY-165, collected:false, bobPhase:0   }, // on table
-      { id:4, x:1180, y:groundY-165, collected:false, bobPhase:1.5 }, // on table
-      { id:5, x:1570, y:groundY-195, collected:false, bobPhase:0.7 }, // on lower shelf
-      { id:6, x:1530, y:groundY-295, collected:false, bobPhase:2.1 }, // on upper shelf
+      { id:3, x:440,  y:groundY-165, collected:false, bobPhase:0   }, // on first table
+      { id:4, x:1180, y:groundY-165, collected:false, bobPhase:1.5 }, // on middle table
+      { id:5, x:1530, y:groundY-295, collected:false, bobPhase:2.1 }, // on upper shelf
     ];
   }
 }
@@ -144,7 +142,7 @@ function buildInteractables(room) {
     interactables = [
       { x:750,  y:groundY-20, w:30, h:20, label:'눈 위의 발자국',
         text:'누군가 방금 지나간 듯\n눈 위에 발자국이 남아있다.\n…나타샤일까.' },
-      { x:1200, y:groundY-20, w:40, h:50, label:'주막 문',
+      { x:1560, y:groundY-20, w:40, h:50, label:'주막 문',
         text:'문틈으로 불빛이 새어나온다.\n안으로 들어가볼까.', isDoor:true },
     ];
   } else {
@@ -158,7 +156,7 @@ function buildInteractables(room) {
       { x:1530, y:groundY-178, w:40, h:18, label:'낡은 지도',
         text:'산골 마을 하나가\n빨간 동그라미로 표시되어 있다.\n거기로 가면 될까.' },
       { x:1850, y:groundY-20, w:50, h:50, label:'뒷문',
-        text:'눈 덮인 마당으로 나가는 문.\n아직은 아니다.', isExit:true },
+        text:'눈 덮인 마당으로 나가는 문.\n이제 떠날 시간이다.', isExit:true },
     ];
   }
 }
@@ -194,8 +192,12 @@ document.addEventListener('keydown', e => {
       if (near.isDoor && !transitioning) {
         doRoomTransition(1);
       } else if (near.isExit && !transitioning) {
-        // just a note for now
-        showThought(near.text, near.x, near.y - 20);
+        if (collected >= TOTAL) {
+          // all gems collected — leave through the back door, end stage
+          showClear();
+        } else {
+          showThought('아직 보석이 남아있다.\n방 안의 보석을 모두 모아야 한다.', near.x, near.y - 20);
+        }
       } else {
         showThought(near.text, near.x, near.y - 20);
       }
@@ -278,7 +280,9 @@ function collectFrag(f) {
   // flash word
   const fl=document.getElementById('s2word_flash');
   fl.textContent=FRAG_WORDS[f.id]||'';
-  const sx=f.x-camX; const sy=f.y-20;
+  const sx=f.x-camX;
+  // sit clearly above the E thought bubble so the two never overlap
+  const sy=Math.max(f.y-200, 30);
   const margin=220;
   const cx=Math.max(margin,Math.min(sx,window.innerWidth-margin));
   fl.style.left=cx+'px'; fl.style.top=sy+'px';
@@ -287,7 +291,7 @@ function collectFrag(f) {
   fl.classList.add('show');
   // @TUNABLE popupFadeMs
   setTimeout(()=>fl.classList.remove('show'), tunables.popupFadeMs);
-  if(collected>=TOTAL) setTimeout(showClear,1600);
+  // stage clears only when player exits through 뒷문 after collecting all
 }
 
 function showClear() {
@@ -369,8 +373,8 @@ function drawRoom0World() {
   gg.addColorStop(0,'#b8d0e6'); gg.addColorStop(0.1,'#a0bcda'); gg.addColorStop(1,'#6888a8');
   ctx.fillStyle=gg; ctx.fillRect(0,groundY,W,H-groundY);
   ctx.fillStyle='rgba(215,235,252,0.55)'; ctx.fillRect(0,groundY,W,4);
-  // door at 1200
-  const dx=1200-camX;
+  // door at 1560
+  const dx=1560-camX;
   ctx.fillStyle='#1a1208';
   ctx.fillRect(dx,groundY-85,55,85);
   ctx.strokeStyle='rgba(180,130,60,0.5)'; ctx.lineWidth=1;

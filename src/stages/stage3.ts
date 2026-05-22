@@ -94,18 +94,19 @@ function buildWorld() {
 const tunables = {
   playerStartX: 120,        // @TUNABLE 캐릭터 시작 X
   playerStartY: -46,        // @TUNABLE 캐릭터 시작 Y (groundY 기준)
-  jumpForce: -10.5,         // @TUNABLE 점프 힘 (P_JUMP)
+  jumpForce: -18,           // @TUNABLE 점프 힘 (P_JUMP)
   moveSpeed: 3.0,           // @TUNABLE 이동 속도 (P_SPEED)
-  gravity: 0.44,            // @TUNABLE 중력
+  gravity: 1,               // @TUNABLE 중력
   donkeySpeed: 4.8,         // @TUNABLE 당나귀 속도
-  donkeyJump: -11.5,        // @TUNABLE 당나귀 점프
+  donkeyJump: -18,          // @TUNABLE 당나귀 점프
   donkeyStartX: 900,        // @TUNABLE 당나귀 시작 X
   fragments: [
-    { x: 480,  yOffset: -60  }, // @TUNABLE 다이아 0
-    { x: 1080, yOffset: -230 }, // @TUNABLE 다이아 1
-    { x: 1900, yOffset: -360 }, // @TUNABLE 다이아 2
-    { x: 2600, yOffset: -440 }, // @TUNABLE 다이아 3
-    { x: 3500, yOffset: -460 }, // @TUNABLE 다이아 4
+    // one gem per hill — terrain segments rise progressively, last one on the summit
+    { x: 1000, yOffset: -85  }, // @TUNABLE 다이아 0  (seg2: groundY-55)
+    { x: 1650, yOffset: -160 }, // @TUNABLE 다이아 1  (seg3: groundY-130)
+    { x: 2250, yOffset: -225 }, // @TUNABLE 다이아 2  (seg4: groundY-195)
+    { x: 2900, yOffset: -300 }, // @TUNABLE 다이아 3  (seg5: groundY-270)
+    { x: 3850, yOffset: -340 }, // @TUNABLE 다이아 4  (seg6: summit groundY-310)
   ],
   labelOffsetY: -24,        // @TUNABLE 다이아 라벨 Y 오프셋
   labelFontSize: 13,        // @TUNABLE 다이아 라벨 폰트 크기
@@ -142,8 +143,15 @@ let gameStarted=false, gameOver=false;
 let collected=0;
 const TOTAL=5;
 let camX=0;
-const FRAG_WORDS=['산골로 가는 것은 세상한테 지는 것이 아니다','세상 같은 건 더러워 버리는 것이다','산골로 가는 것은 세상한테 지는 것이 아니다','세상 같은 건 더러워 버리는 것이다','함께 떠난다'];
-const FRAG_LINES=[[0],[1],[0],[1],[]];
+// poem split into 5 phrases — one per hill
+const FRAG_WORDS=[
+  '산골로 가는 것은',
+  '세상한테 지는 것이 아니다',
+  '세상 같은 건',
+  '더러워',
+  '버리는 것이다',
+];
+const FRAG_LINES=[[0],[0],[1],[1],[1]];
 
 // ─── MOUNT SYSTEM ───
 let nearDonkey = false;
@@ -214,12 +222,40 @@ function resolveEntity(ent, speed, jumpForce) {
   ent.y  += ent.vy;
   // world bounds
   ent.x = Math.max(40, Math.min(ent.x, WORLD_W - 40));
-  // platform collision
   ent.onGround = false;
+
+  // ── wall collision: cliff faces of large terrain segments only
+  //   (small stepping-stone platforms keep their old jump-through behavior).
+  //   We track entity *center* (the same anchor used by landing) so wide
+  //   entities like the donkey can't sneak across cliff edges unnoticed.
+  //   The check only fires while the entity foot is currently AND was
+  //   previously below the segment top — descending onto a platform still
+  //   lands cleanly via the landing pass below.
+  {
+    const cx = ent.x + ent.w/2;
+    const prevCx = cx - ent.vx;
+    platforms.forEach(p => {
+      if (p.h < 100) return;
+      const eb = ent.y + ent.h;
+      const prevEb = eb - ent.vy;
+      if (eb <= p.y + 2 || prevEb <= p.y + 2) return;
+      if (cx < p.x || cx >= p.x + p.w) return;
+      if (prevCx < p.x) {
+        // crossed into segment from the left — block at the cliff
+        ent.x = p.x - ent.w/2 - 0.5; ent.vx = 0;
+      } else if (prevCx >= p.x + p.w) {
+        // crossed in from the right
+        ent.x = p.x + p.w - ent.w/2 + 0.5; ent.vx = 0;
+      }
+    });
+  }
+
+  // ── landing: stand on the platform under the entity center
+  const cx = ent.x + ent.w/2;
   platforms.forEach(p => {
     const eb = ent.y + ent.h;
     const prevEb = eb - ent.vy;
-    if (ent.x + ent.w*0.4 > p.x && ent.x + ent.w*0.6 < p.x + p.w) {
+    if (cx >= p.x && cx < p.x + p.w) {
       if (prevEb <= p.y + 2 && eb >= p.y && ent.vy >= 0) {
         ent.y = p.y - ent.h; ent.vy = 0; ent.onGround = true;
       }
@@ -289,18 +325,26 @@ function updateEntities() {
   camX += (targetCam - camX) * 0.07;
   camX = Math.max(0, Math.min(camX, WORLD_W - W));
 
-  // fragment collection
+  // fragment collection — must be on the donkey
   fragments.forEach(f => {
     if (f.collected) return;
-    const cx = player.mounted ? donkey.x+donkey.w/2 : player.x;
-    const cy = player.mounted ? donkey.y+donkey.h/2 : player.y+player.h/2;
-    const range = player.mounted ? 70 : 44;
-    if (Math.hypot(cx-f.x, cy-f.y) < range) collectFrag(f);
+    if (!player.mounted) {
+      // hint the player to come back with the donkey
+      const dist = Math.hypot(player.x-f.x, player.y+player.h/2-f.y);
+      if (dist < 60) showThought('당나귀와 같이 오세요', f.x, f.y);
+      return;
+    }
+    const cx = donkey.x+donkey.w/2;
+    const cy = donkey.y+donkey.h/2;
+    if (Math.hypot(cx-f.x, cy-f.y) < 70) collectFrag(f);
   });
 
   // cursor interact hint
   const nearObj = interactables.find(ob=>Math.abs(player.x-(ob.x+ob.w/2))<75&&Math.abs((player.y+player.h)-ob.y)<90);
   cursorEl.classList.toggle('interact', !!nearObj || nearDonkey);
+
+  // ready to clear once all gems are collected and the player is on the donkey
+  maybeClear();
 }
 
 function collectFrag(f) {
@@ -319,7 +363,15 @@ function collectFrag(f) {
   fl.classList.add('show');
   // @TUNABLE popupFadeMs
   setTimeout(()=>fl.classList.remove('show'), tunables.popupFadeMs);
-  if(collected>=TOTAL) setTimeout(showClear,1800);
+}
+
+let clearTriggered = false;
+function maybeClear() {
+  if (clearTriggered) return;
+  if (collected < TOTAL) return;
+  if (!player.mounted) return;
+  clearTriggered = true;
+  setTimeout(showClear, 1500);
 }
 
 function showClear() {
@@ -548,6 +600,7 @@ function drawDonkey() {
 
   ctx.save(); ctx.translate(dx,dy);
   const flip=donkey.dir<0?-1:1;
+  if(flip<0) ctx.translate(donkey.w,0);
   ctx.scale(flip,1);
 
   const moving=Math.abs(donkey.vx)>0.3;
@@ -757,6 +810,7 @@ function resetStateS3() {
   donkey.vx = 0; donkey.vy = 0; donkey.found = false;
   collected = 0;
   gameOver = false;
+  clearTriggered = false;
   camX = 0;
   fragments.forEach((f) => (f.collected = false));
   for (let i = 0; i < fragments.length; i++) {

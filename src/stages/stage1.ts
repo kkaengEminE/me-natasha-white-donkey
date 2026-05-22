@@ -92,9 +92,9 @@ const TOTAL_FRAGMENTS = 3;
 const tunables = {
   playerStartX: 160,        // @TUNABLE 캐릭터 시작 X
   playerStartY: -48,        // @TUNABLE 캐릭터 시작 Y (groundY 기준 오프셋, 음수=위)
-  jumpForce: -9.5,          // @TUNABLE 점프 힘 (음수가 강함)
+  jumpForce: -18,           // @TUNABLE 점프 힘 (음수가 강함)
   moveSpeed: 2.8,           // @TUNABLE 이동 속도
-  gravity: 0.45,            // @TUNABLE 중력
+  gravity: 1,               // @TUNABLE 중력
   // fragments: [x, y는 groundY 기준 오프셋]
   fragments: [
     { x: 680,  yOffset: -150 }, // @TUNABLE 다이아 0

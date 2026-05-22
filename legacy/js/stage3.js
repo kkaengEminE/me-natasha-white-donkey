@@ -109,7 +109,7 @@ let gameStarted=false, gameOver=false;
 let collected=0;
 const TOTAL=5;
 let camX=0;
-const FRAG_WORDS=['세상한테 지는 것이 아니다','더러워 버리는 것이다','산골로 가는 것은','세상 같은 건','함께 떠난다'];
+const FRAG_WORDS=['산골로 가는 것은','세상한테 지는 것이 아니다','세상 같은 건','더러워','버리는 것이다'];
 const FRAG_LINES=[[0],[1],[0],[1],[]];
 
 // ─── MOUNT SYSTEM ───

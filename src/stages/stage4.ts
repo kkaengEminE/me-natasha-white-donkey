@@ -25,11 +25,11 @@ const WORLD_W=4800;
 const tunables = {
   playerStartX: 120,        // @TUNABLE 캐릭터 시작 X
   playerStartY: -46,        // @TUNABLE 캐릭터 시작 Y
-  jumpForce: -10,           // @TUNABLE 점프 힘
+  jumpForce: -18,           // @TUNABLE 점프 힘
   moveSpeed: 2.8,           // @TUNABLE 이동 속도
-  gravity: 0.42,            // @TUNABLE 중력
+  gravity: 1,               // @TUNABLE 중력
   donkeySpeed: 4.6,         // @TUNABLE 당나귀 속도
-  donkeyJump: -11.5,        // @TUNABLE 당나귀 점프
+  donkeyJump: -18,          // @TUNABLE 당나귀 점프
   donkeyStartX: 200,        // @TUNABLE 당나귀 시작 X
   fragments: [
     { x: 500,  yOffset: -80  }, // @TUNABLE 다이아 0
@@ -329,17 +329,24 @@ function updateEntities(){
 
   updateBirds(); updateFootsteps();
 
-  // fragment collection
+  // fragment collection — must be on the donkey
   fragments.forEach(f=>{
     if(f.collected)return;
-    const cx=player.mounted?donkey.x+donkey.w/2:player.x;
-    const cy=player.mounted?donkey.y+donkey.h/2:player.y+player.h/2;
-    if(Math.hypot(cx-f.x,cy-f.y)<(player.mounted?70:44)) collectFrag(f);
+    if(!player.mounted){
+      const dist=Math.hypot(player.x-f.x,player.y+player.h/2-f.y);
+      if(dist<60) showThought('당나귀와 같이 오세요',f.x,f.y);
+      return;
+    }
+    const cx=donkey.x+donkey.w/2;
+    const cy=donkey.y+donkey.h/2;
+    if(Math.hypot(cx-f.x,cy-f.y)<70) collectFrag(f);
   });
 
   // cursor
   const nearObj=interactables.find(ob=>Math.abs(player.x-(ob.x+ob.w/2))<75&&Math.abs((player.y+player.h)-ob.y)<100);
   cursorEl.classList.toggle('interact',!!nearObj||nearDonkey);
+
+  maybeClear();
 }
 
 function collectFrag(f){
@@ -357,7 +364,15 @@ function collectFrag(f){
   fl.classList.add('show');
   // @TUNABLE popupFadeMs
   setTimeout(()=>fl.classList.remove('show'), tunables.popupFadeMs);
-  if(collected>=TOTAL) setTimeout(showClear,2200);
+}
+
+let clearTriggered = false;
+function maybeClear(){
+  if(clearTriggered) return;
+  if(collected<TOTAL) return;
+  if(!player.mounted) return;
+  clearTriggered = true;
+  setTimeout(showClear, 1800);
 }
 
 function showClear(){
@@ -570,15 +585,15 @@ function drawChoin(){
 
   // glow behind silhouette
   ctx.save();
-  ctx.globalAlpha=Math.min(choinProgress*4, 1-Math.max(0,(choinProgress-0.7)*3))*0.5;
-  const gw=ctx.createRadialGradient(sx,sy,0,sx,sy,130);
-  gw.addColorStop(0,'rgba(200,220,255,0.25)');
+  ctx.globalAlpha=Math.min(choinProgress*4, 1-Math.max(0,(choinProgress-0.7)*3))*0.85;
+  const gw=ctx.createRadialGradient(sx,sy,0,sx,sy,150);
+  gw.addColorStop(0,'rgba(220,235,255,0.55)');
   gw.addColorStop(1,'rgba(0,0,0,0)');
-  ctx.fillStyle=gw; ctx.fillRect(sx-130,sy-130,260,260);
+  ctx.fillStyle=gw; ctx.fillRect(sx-150,sy-150,300,300);
   ctx.restore();
 
   ctx.save();
-  ctx.globalAlpha=Math.min(choinProgress*5, 1-Math.max(0,(choinProgress-0.75)*4))*0.85;
+  ctx.globalAlpha=Math.min(choinProgress*5, 1-Math.max(0,(choinProgress-0.78)*4))*1.0;
 
   // silhouette of rider on horse — pure dark shape
   // horse body
@@ -629,7 +644,9 @@ function drawDonkey(){
   const t=Date.now()/1000;
   const dx=donkey.x-camX, dy=donkey.y;
   if(dx<-120||dx>W+120)return;
-  ctx.save(); ctx.translate(dx,dy); ctx.scale(donkey.dir,1);
+  ctx.save(); ctx.translate(dx,dy);
+  if(donkey.dir<0) ctx.translate(donkey.w,0);
+  ctx.scale(donkey.dir,1);
   const moving=Math.abs(donkey.vx)>0.3;
   const legSw=moving?Math.sin(donkey.walkT)*13:0;
   // shadow
@@ -770,6 +787,7 @@ function resetStateS4(){
   donkey.vx = 0; donkey.vy = 0;
   collected = 0;
   gameOver = false;
+  clearTriggered = false;
   camX = 0;
   choinTriggered = false; choinActive = false; choinPhase = 0; choinAlpha = 0;
   fragments.forEach((f) => (f.collected = false));
